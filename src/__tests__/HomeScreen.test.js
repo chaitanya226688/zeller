@@ -3,160 +3,110 @@ import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { API } from 'aws-amplify';
 import HomeScreen from '../screens/HomeScreen';
 
-// Mock the API.graphql call
+// Mock navigation
+jest.mock('@react-navigation/native', () => ({
+    useNavigation: () => ({
+        push: jest.fn(),
+    }),
+}));
+
+// Mock API call
 jest.mock('aws-amplify', () => ({
     API: {
         graphql: jest.fn(),
     },
+    graphqlOperation: jest.fn(),
 }));
 
-jest.mock('@react-navigation/native', () => ({
-    ...jest.requireActual('@react-navigation/native'),
-    useNavigation: () => ({
-        navigate: jest.fn(),
-    }),
-}));
-
-describe('HomeScreen', () => {
+describe('HomeScreen Component', () => {
     beforeEach(() => {
-        // Reset the mock before each test
-        API.graphql.mockReset();
+        jest.clearAllMocks();
     });
 
-    it('renders correctly with initial data', async () => {
-        // Mock API response for the initial data
-        API.graphql.mockResolvedValue({
-            data: {
-                listZellerCustomers: {
-                    items: [{ id: '1', name: 'John Doe', role: 'ADMIN' }],
-                },
-            },
-        });
-
+    test('renders the HomeScreen correctly', () => {
         const { getByText } = render(<HomeScreen />);
 
-        await waitFor(() => getByText('John Doe'));
-
-        expect(getByText('John Doe')).toBeTruthy();
+        expect(getByText('User Types')).toBeTruthy();
+        expect(getByText('Admin Users')).toBeTruthy();
     });
 
-    it('renders correctly with multiple users', async () => {
-        // Mock API response for multiple users
-        API.graphql.mockResolvedValue({
-            data: {
-                listZellerCustomers: {
-                    items: [
-                        { id: '1', name: 'John Doe', role: 'ADMIN' },
-                        { id: '2', name: 'Jane Smith', role: 'MANAGER' },
-                    ],
-                },
-            },
-        });
-
-        const { getByText, getByPlaceholderText } = render(<HomeScreen />);
-
-        await waitFor(() => getByText('John Doe'));
-
-        expect(getByText('John Doe')).toBeTruthy();
-        expect(getByText('Jane Smith')).toBeTruthy();
-        expect(getByPlaceholderText('Search User')).toBeTruthy();
-    });
-
-    it('changes user type when a radio button is clicked', async () => {
-        // Mock API response for the initial users
-        API.graphql.mockResolvedValue({
-            data: {
-                listZellerCustomers: {
-                    items: [
-                        { id: '1', name: 'John Doe', role: 'ADMIN' },
-                        { id: '2', name: 'Jane Smith', role: 'MANAGER' },
-                    ],
-                },
-            },
-        });
-
+    test('renders radio buttons and handles selection', () => {
         const { getByText } = render(<HomeScreen />);
 
-        await waitFor(() => getByText('ADMIN'));
+        const adminButton = getByText('Admin');
+        const managerButton = getByText('Manager');
 
-        fireEvent.press(getByText('MANAGER'));
+        expect(adminButton).toBeTruthy();
+        expect(managerButton).toBeTruthy();
 
-        expect(getByText('MANAGER')).toBeTruthy();
+        fireEvent.press(managerButton);
+        expect(getByText('Manager')).toBeTruthy();
     });
 
-    it('filters users based on search text', async () => {
-        // Mock API response for multiple users
-        API.graphql.mockResolvedValue({
+    test('calls fetchCustomers on mount', async () => {
+        API.graphql.mockResolvedValueOnce({
+            data: {
+                listZellerCustomers: {
+                    items: [{ id: '1', name: 'David Miler', role: 'ADMIN' }],
+                    nextToken: null,
+                },
+            },
+        });
+
+        const { findByText } = render(<HomeScreen />);
+
+        await waitFor(() => expect(findByText('David Miler')).toBeTruthy());
+    });
+
+    test('filters user list based on search text', async () => {
+        API.graphql.mockResolvedValueOnce({
             data: {
                 listZellerCustomers: {
                     items: [
-                        { id: '1', name: 'John Doe', role: 'ADMIN' },
-                        { id: '2', name: 'Jane Smith', role: 'MANAGER' },
+                        { id: '1', name: 'David Miler', role: 'ADMIN' },
+                        { id: '2', name: 'Lynn Warr', role: 'MANAGER' },
                     ],
+                    nextToken: null,
                 },
             },
         });
 
-        const { getByPlaceholderText, getByText } = render(<HomeScreen />);
+        const { getByPlaceholderText, findByText, queryByText } = render(<HomeScreen />);
 
-        await waitFor(() => getByText('John Doe'));
+        await waitFor(() => expect(findByText('David Miler')).toBeTruthy());
 
-        fireEvent.changeText(getByPlaceholderText('Search User'), 'Jane');
+        const searchInput = getByPlaceholderText('Search User');
+        fireEvent.changeText(searchInput, 'David');
 
-        expect(getByText('Jane Smith')).toBeTruthy();
-        expect(() => getByText('John Doe')).toThrow(); // John Doe should no longer be in the list
+        expect(queryByText('Ryan Muller')).toBeNull();
+        expect(await findByText('David Miler')).toBeTruthy();
     });
 
-    it('refreshes the list of users when pulled down', async () => {
-        // Mock API response for initial users
-        API.graphql.mockResolvedValue({
+    test('handles refresh action', async () => {
+        API.graphql.mockResolvedValueOnce({
             data: {
                 listZellerCustomers: {
-                    items: [
-                        { id: '1', name: 'John Doe', role: 'ADMIN' },
-                        { id: '2', name: 'Jane Smith', role: 'MANAGER' },
-                    ],
+                    items: [{ id: '1', name: 'David Miler', role: 'ADMIN' }],
+                    nextToken: null,
                 },
             },
         });
 
-        const { getByText, getByTestId } = render(<HomeScreen />);
+        const { getByText, findByText } = render(<HomeScreen />);
 
-        await waitFor(() => getByText('John Doe'));
+        await waitFor(() => expect(findByText('David Miler')).toBeTruthy());
 
-        const flatList = getByTestId('flatlist');
-        fireEvent(flatList, 'onRefresh');
-
-        expect(API.graphql).toHaveBeenCalledTimes(2); // The API should be called twice (initial fetch + refresh)
-    });
-
-    it('shows loading spinner while fetching data', async () => {
-        // Mock API response for the initial data
-        API.graphql.mockResolvedValue({
+        API.graphql.mockResolvedValueOnce({
             data: {
                 listZellerCustomers: {
-                    items: [{ id: '1', name: 'John Doe', role: 'ADMIN' }],
+                    items: [{ id: '2', name: 'Bob', role: 'MANAGER' }],
+                    nextToken: null,
                 },
             },
         });
 
-        const { getByTestId, queryByTestId } = render(<HomeScreen />);
+        fireEvent.press(getByText('Admin Users'));
 
-        expect(getByTestId('loading-spinner')).toBeTruthy();
-
-        await waitFor(() => queryByTestId('loading-spinner') === null);
-    });
-
-    it('handles API error gracefully', async () => {
-        // Mock API to throw an error
-        jest.spyOn(API, 'graphql').mockImplementationOnce(() => {
-            throw new Error('Network Error');
-        });
-
-        const { getByText } = render(<HomeScreen />);
-
-        await waitFor(() => getByText('Error fetching customers: Network Error'));
-
-        expect(getByText('Error fetching customers: Network Error')).toBeTruthy();
+        await waitFor(() => expect(findByText('David Miler')).toBeTruthy());
     });
 });

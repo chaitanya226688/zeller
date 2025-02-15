@@ -6,4 +6,5 @@ module.exports = {
     '\\.jpeg$': '<rootDir>/__mocks__/fileMock.js',
     '\\.svg$': '<rootDir>/__mocks__/fileMock.js',
   },
+  setupFiles: ['<rootDir>/jsSetup.js']
 };
